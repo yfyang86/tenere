@@ -4,6 +4,7 @@ use crate::{chat::Chat, prompt::Mode};
 use crate::{
     app::{App, AppResult, FocusedBlock},
     event::Event,
+    notification::{Notification, NotificationLevel},
 };
 
 use crate::llm::LLM;
@@ -15,6 +16,11 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use tokio::sync::mpsc::UnboundedSender;
+
+use std::fs::OpenOptions;
+use std::io::Write;
+
+use chrono::Local;
 
 pub async fn handle_key_events(
     key_event: KeyEvent,
@@ -30,6 +36,50 @@ pub async fn handle_key_events(
 
         KeyCode::Char('c') if key_event.modifiers == KeyModifiers::CONTROL => {
             app.running = false;
+        }
+
+        //write the result to cache file
+        KeyCode::Char('w') => {
+            if let FocusedBlock::History = app.focused_block {
+                if let Some(selected_index) = app.history.get_selected_index() {
+                    let selected_history_prompts_and_chat = format!(
+                        "{}\n{}",
+                        app.history.text[selected_index].join("\n"),
+                        app.history.preview.text[selected_index].to_string()
+                    );
+                    let file_path = app.config.file_path.history_file_path.to_string();
+                    let now = Local::now()
+                        .format("📅 [SESSION TIME] %Y-%m-%d %H:%M:%s")
+                        .to_string();
+
+                    let mut file = OpenOptions::new()
+                        .append(true)
+                        .create(true)
+                        .open(file_path)?;
+
+                    writeln!(
+                        file,
+                        "{}",
+                        format!("{}\n{}", now, selected_history_prompts_and_chat)
+                    )?;
+                    let notif = Notification::new("写入历史".to_string(), NotificationLevel::Info);
+                    sender.send(Event::Notification(notif)).unwrap();
+                }
+            } else {
+                let current_result = app.chat.formatted_chat.to_string();
+                let file_path = app.config.file_path.result_vault_path.to_string();
+                let now = Local::now()
+                    .format("📅 [SESSION TIME] %Y-%m-%d %H:%M:%s")
+                    .to_string();
+
+                let mut file = OpenOptions::new()
+                    .append(true)
+                    .create(true)
+                    .open(file_path)?;
+                writeln!(file, "{}", format!("{}\n{}", now, current_result))?;
+                let notif = Notification::new("写入记录".to_string(), NotificationLevel::Info);
+                sender.send(Event::Notification(notif)).unwrap();
+            }
         }
 
         // Terminate the stream response

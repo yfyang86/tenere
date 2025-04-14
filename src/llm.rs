@@ -10,6 +10,7 @@ use strum_macros::Display;
 use strum_macros::EnumIter;
 use tokio::sync::mpsc::UnboundedSender;
 
+
 use std::sync::Arc;
 
 #[async_trait]
@@ -55,6 +56,7 @@ impl LLMModel {
             LLMBackend::ChatGPT => Box::new(ChatGPT::new(config.chatgpt.clone())),
             LLMBackend::LLamacpp => Box::new(LLamacpp::new(config.llamacpp.clone().unwrap())),
             LLMBackend::Ollama => Box::new(Ollama::new(config.ollama.clone().unwrap())),
+
         }
     }
 }

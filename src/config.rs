@@ -1,4 +1,4 @@
-use crate::llm::LLMBackend;
+use crate::llm::{LLMBackend};
 use toml;
 
 use dirs;
@@ -10,6 +10,9 @@ pub struct Config {
     #[serde(default)]
     pub key_bindings: KeyBindings,
 
+    #[serde(default)]
+    pub file_path: TmpPath,
+
     #[serde(default = "default_llm_backend")]
     pub llm: LLMBackend,
 
@@ -19,10 +22,41 @@ pub struct Config {
     pub llamacpp: Option<LLamacppConfig>,
 
     pub ollama: Option<OllamaConfig>,
+
 }
 
 pub fn default_llm_backend() -> LLMBackend {
     LLMBackend::ChatGPT
+
+}
+
+// Paths
+#[derive(Deserialize, Debug, Clone)]
+pub struct TmpPath {
+    #[serde(default = "TmpPath::default_history_file_path")]
+    pub history_file_path: String,
+
+    #[serde(default = "TmpPath::default_result_vault_path")]
+    pub result_vault_path: String,
+}
+
+impl Default for TmpPath {
+    fn default() -> Self {
+        Self {
+            history_file_path: Self::default_history_file_path(),
+            result_vault_path: Self::default_result_vault_path(),
+        }
+    }
+}
+
+impl TmpPath {
+    pub fn default_history_file_path() -> String {
+        String::from("history.md")
+    }
+
+    pub fn default_result_vault_path() -> String {
+        String::from("ResultVault.md")
+    }
 }
 
 // ChatGPT
@@ -140,6 +174,12 @@ impl Config {
             eprintln!("Config for Ollama is not provided");
             std::process::exit(1)
         }
+
+        // check Sophon
+        // if app_config.llm == LLMBackend::Sophon && app_config.sophon.api_key.is_none() {
+        //     eprintln!("Config for ChatGPT is not provided");
+        //     std::process::exit(1)
+        // }
 
         app_config
     }

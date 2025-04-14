@@ -169,8 +169,17 @@ Include your API key in the configuration file:
 ```toml
 [chatgpt]
 openai_api_key = "Your API key here"
+model = "model_name"
+url = "Either OpenAI format or SGLang format"
+
+[chatgpt]
+openai_api_key = "Your API key here"
 model = "gpt-3.5-turbo"
 url = "https://api.openai.com/v1/chat/completions"
+
+[file_path]
+history_file_path = "history.md"
+result_vault_path = "result_vault.md"
 ```
 
 The default model is set to `gpt-3.5-turbo`. Check out the [OpenAI documentation](https://platform.openai.com/docs/models/gpt-3-5) for more info.
@@ -224,7 +233,7 @@ More infos about ollama api [here](https://github.com/ollama/ollama/blob/main/do
 
 These are the default key bindings regardless of the focused block.
 
-`ctrl + n`: Start a new chat and save the previous one in history and save it to `tenere.archive-i` file in `data directory`.
+`ctrl + n`: Start a new chat and save the previous one in history and save it to `tenere.archive-i` file in [data directory](https://docs.rs/dirs-next/latest/dirs_next/fn.data_dir.html). 
 
 `Tab`: Switch the focus.
 
@@ -239,6 +248,8 @@ These are the default key bindings regardless of the focused block.
 `q` or `ctrl + c`: Quit the app
 
 `?`: Show the help pop-up. Press `Esc` to dismiss it
+
+`w`: When view the chat, save the current chat to a file. When view the history, save the selected chat to a file. Config `result_vault_path` or `history_path` in the config file to change the default path accordingly.
 
 ### Prompt
 
@@ -266,7 +277,7 @@ There are 3 modes like vim: `Normal`, `Visual` and `Insert`.
 
 `l or Right`: Move the cursor forward by one char.
 
-`w`: Move the cursor right by one word.
+`w`: [masked and disabled unless recaped] Move the cursor right by one word.
 
 `b`: Move the cursor backward by one word.
 
@@ -339,3 +350,22 @@ There are 3 modes like vim: `Normal`, `Visual` and `Insert`.
 ## ⚖️ License
 
 GNU General Public License v3.0 or later
+
+
+## Testing feature
+
+- [x] LM-studio, SGlang, Transwarp Sophon-LLMOps and openai format are both supported in the name of `chatgpt`;
+- [x] Chat history is saved in the data directory.
+
+## Future plans and Discussions
+
+### Awareness of Different Backends
+
+In the future, the system should match the optimal backend automatically based on feedbacks from (both) the configs and the server.
+
+### Markdown Rendering
+
+Optimize the markdown rendering supporting tables.
+
+First choice is **rust native** library for markdown rendering. Sub-optimal user friendly binary-utils: framebuffer or sixel would be potentially choices. But they are neither cross platform nor developer friendly. Considering there is no image rending task currently, we could use the native library for now.
+
