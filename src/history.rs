@@ -45,6 +45,10 @@ impl History<'_> {
         }
     }
 
+    pub fn get_selected_index(&self) -> Option<usize> {
+        self.state.selected()
+    }
+
     pub fn move_to_top(&mut self) {
         if !self.text.is_empty() {
             self.state.select(Some(0));
@@ -136,8 +140,15 @@ impl History<'_> {
         if !self.text.is_empty() {
             match std::fs::write(file_path.clone(), self.text[chat_index_in_history].join("")) {
                 Ok(_) => {
-                    let notif =
-                        Notification::new("Chat saved".to_string(), NotificationLevel::Info);
+                    // MAC: ${HOME}/Library/Application Support/tenere
+                    let notif = Notification::new(
+                        format!(
+                            "{}\t{}",
+                            file_path.display().to_string(),
+                            "Chat saved".to_string()
+                        ),
+                        NotificationLevel::Info,
+                    );
 
                     sender.send(Event::Notification(notif)).unwrap();
                 }

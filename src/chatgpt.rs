@@ -70,7 +70,10 @@ impl LLM for ChatGPT {
 
         let mut messages = vec![HashMap::from([
             ("role".to_string(), "system".to_string()),
-            ("content".to_string(), "You are a helpful assistant.".to_string()),
+            (
+                "content".to_string(),
+                "You are a helpful assistant.".to_string(),
+            ),
         ])];
         messages.extend(self.messages.clone());
 
@@ -90,7 +93,7 @@ impl LLM for ChatGPT {
 
         let mut stream = response.bytes_stream();
         let mut buffer = Bytes::new();
-        let mut json_buffer = String::new();
+        let mut line_buffer = String::new();
 
         sender.send(Event::LLMEvent(LLMAnswer::StartAnswer))?;
 
@@ -102,20 +105,20 @@ impl LLM for ChatGPT {
 
             let chunk = chunk_result?;
             buffer = Bytes::from([buffer.as_ref(), chunk.as_ref()].concat());
-            
+
             // Process complete lines
             while let Some(newline_pos) = buffer.iter().position(|&b| b == b'\n') {
                 let line = buffer.split_to(newline_pos + 1);
                 let line_str = String::from_utf8_lossy(&line[..line.len() - 1]); // Exclude \n
-                
-                process_line(line_str, &mut json_buffer, &sender)?;
+
+                process_sse_line(line_str.to_string(), &mut line_buffer, &sender)?;
             }
         }
 
         // Process remaining data
         if !buffer.is_empty() {
             let line_str = String::from_utf8_lossy(&buffer);
-            process_line(line_str, &mut json_buffer, &sender)?;
+            process_sse_line(line_str.to_string(), &mut line_buffer, &sender)?;
         }
 
         sender.send(Event::LLMEvent(LLMAnswer::EndAnswer))?;
@@ -123,9 +126,9 @@ impl LLM for ChatGPT {
     }
 }
 
-fn process_line(
-    line: std::borrow::Cow<str>,
-    json_buffer: &mut String,
+fn process_sse_line(
+    line: String,
+    line_buffer: &mut String,
     sender: &UnboundedSender<Event>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let line = line.trim();
@@ -133,32 +136,58 @@ fn process_line(
         return Ok(());
     }
 
-    let data = line.strip_prefix("data: ").unwrap_or(line);
-    if data == "[DONE]" {
+    // Skip id lines, we're only interested in data lines
+    if line.starts_with("id:") {
         return Ok(());
     }
 
-    json_buffer.push_str(data);
-    
-    match serde_json::from_str::<Value>(json_buffer) {
-        Ok(value) => {
-            if let Some(content) = value["choices"][0]["delta"]["content"].as_str() {
-                if !content.is_empty() {
-                    sender.send(Event::LLMEvent(LLMAnswer::Answer(content.to_string())))?;
+    // Process data lines
+    if let Some(data) = line.strip_prefix("data:") {
+        let data = data.trim();
+        if data == "[DONE]" {
+            return Ok(());
+        }
+
+        // Parse the JSON data
+        match serde_json::from_str::<Value>(data) {
+            Ok(json_value) => {
+                if let Some(content) = json_value["choices"][0]["delta"]["content"].as_str() {
+                    if !content.is_empty() {
+                        sender.send(Event::LLMEvent(LLMAnswer::Answer(content.to_string())))?;
+                    }
                 }
             }
-            json_buffer.clear();
-        }
-        Err(e) if e.classify() == serde_json::error::Category::Eof => {
-            // Keep incomplete JSON for next chunk
-        }
-        Err(e) => {
-            json_buffer.clear();
-            sender.send(Event::LLMEvent(LLMAnswer::Answer(
-                format!("[JSON PARSE ERROR: {}]", e).to_string(),
-            )))?;
+            Err(e) => {
+                // Add to buffer for potential multi-line JSON
+                line_buffer.push_str(data);
+
+                // Try to parse the combined buffer
+                match serde_json::from_str::<Value>(line_buffer) {
+                    Ok(json_value) => {
+                        if let Some(content) = json_value["choices"][0]["delta"]["content"].as_str() {
+                            if !content.is_empty() {
+                                sender.send(Event::LLMEvent(LLMAnswer::Answer(content.to_string())))?;
+                            }
+                        }
+                        line_buffer.clear();
+                    }
+                    Err(_) => {
+                        // If still can't parse, might be incomplete JSON
+                        // Keep buffer for next chunk
+                        if e.is_eof() {
+                            // This is fine, wait for more data
+                        } else {
+                            // This is an actual parsing error
+                            sender.send(Event::LLMEvent(LLMAnswer::Answer(
+                                format!("[JSON PARSE ERROR: {}]", e).to_string(),
+                            )))?;
+                            line_buffer.clear();
+                        }
+                    }
+                }
+            }
         }
     }
-    
+
     Ok(())
 }
